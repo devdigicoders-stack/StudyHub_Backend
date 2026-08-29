@@ -1,4 +1,4 @@
-const {db} = require("../config/firebase");
+const Post = require("../models/Post");
 
 exports.createPost = async (req, res) => {
   try {
@@ -8,51 +8,32 @@ exports.createPost = async (req, res) => {
       return res.status(400).json({ error: "Type and Title are required" });
     }
 
-    const dataToSave = {
+    const newPost = await Post.create({
       type,
       title,
-      createdAt: new Date(),
-    };
+      desc,
+      link,
+      author,
+      tag,
+    });
 
-    if (desc) dataToSave.desc = desc;
-    if (link) dataToSave.link = link;
-    if (author) dataToSave.author = author;
-    if (tag) dataToSave.tag = tag;
-
-    const docRef = await db.collection("posts").add(dataToSave);
-    res.status(201).json({ success: true, id: docRef.id, ...dataToSave });
+    res.status(201).json({
+      success: true,
+      id: newPost._id,
+      ...newPost.toJSON(),
+    });
   } catch (error) {
-    console.error("Error creating post:", error);
+    console.error("Error creating post in MongoDB:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
 exports.getPosts = async (req, res) => {
   try {
-    const snapshot = await db.collection("posts").get();
-    let posts = [];
-    snapshot.forEach((doc) => {
-      posts.push({ id: doc.id, ...doc.data() });
-    });
-
-    // Sort newest first
-    posts.sort((a, b) => {
-      const dateA = a.createdAt
-        ? a.createdAt.toDate
-          ? a.createdAt.toDate()
-          : new Date(a.createdAt)
-        : new Date(0);
-      const dateB = b.createdAt
-        ? b.createdAt.toDate
-          ? b.createdAt.toDate()
-          : new Date(b.createdAt)
-        : new Date(0);
-      return dateB - dateA;
-    });
-
+    const posts = await Post.find().sort({ createdAt: -1 });
     res.json(posts);
   } catch (error) {
-    console.error("Error fetching posts:", error);
+    console.error("Error fetching posts from MongoDB:", error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -60,10 +41,10 @@ exports.getPosts = async (req, res) => {
 exports.deletePost = async (req, res) => {
   try {
     const { id } = req.params;
-    await db.collection("posts").doc(id).delete();
-    res.json({ success: true, message: "Post deleted successfully" });
+    await Post.findByIdAndDelete(id);
+    res.json({ success: true, message: "Post deleted successfully from MongoDB" });
   } catch (error) {
-    console.error("Error deleting post:", error);
+    console.error("Error deleting post from MongoDB:", error);
     res.status(500).json({ error: error.message });
   }
 };

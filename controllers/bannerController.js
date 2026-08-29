@@ -1,7 +1,7 @@
 const cloudinary = require("../config/cloudinary");
-const { db } = require("../config/firebase");
+const Banner = require("../models/Banner");
 
-// 🔥 UPLOAD
+// 🔥 UPLOAD BANNER
 exports.uploadBanner = async (req, res) => {
   try {
     const { category } = req.body;
@@ -23,20 +23,19 @@ exports.uploadBanner = async (req, res) => {
       },
     );
 
-    // 🔥 SAVE NEW
-    const docRef = await db.collection("banners").add({
+    // Save to MongoDB
+    const banner = await Banner.create({
       url: uploadResult.secure_url,
       public_id: uploadResult.public_id,
       category,
-      createdAt: new Date(),
     });
 
     return res.json({
       success: true,
       data: {
-        id: docRef.id,
-        url: uploadResult.secure_url,
-        category,
+        id: banner._id,
+        url: banner.url,
+        category: banner.category,
       },
     });
   } catch (err) {
@@ -49,20 +48,12 @@ exports.getBanners = async (req, res) => {
   try {
     const { category } = req.query;
 
-    let query = db.collection("banners");
-
+    const filter = {};
     if (category) {
-      query = query.where("category", "==", category);
+      filter.category = category;
     }
 
-    const snapshot = await query.get();
-
-    if (snapshot.empty) return res.json([]);
-
-    const banners = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    const banners = await Banner.find(filter).sort({ createdAt: -1 });
 
     return res.json(banners);
   } catch (err) {
@@ -70,50 +61,37 @@ exports.getBanners = async (req, res) => {
   }
 };
 
-// 🔥 GET SINGLE (if needed)
+// 🔥 GET SINGLE BANNER
 exports.getSingleBanner = async (req, res) => {
   try {
     const { page } = req.params;
 
-    const snapshot = await db
-      .collection("banners")
-      .where("page", "==", page)
-      .limit(1)
-      .get();
+    const banner = await Banner.findOne({ page });
 
-    if (snapshot.empty) return res.json(null);
-
-    const doc = snapshot.docs[0];
-
-    return res.json({
-      id: doc.id,
-      ...doc.data(),
-    });
+    return res.json(banner || null);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// 🔥 DELETE
+// 🔥 DELETE BANNER
 exports.deleteBanner = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const docRef = db.collection("banners").doc(id);
-    const doc = await docRef.get();
+    const banner = await Banner.findById(id);
 
-    if (!doc.exists) {
+    if (!banner) {
       return res.status(404).json({ message: "Not found" });
     }
 
-    const data = doc.data();
-
-    if (data.public_id) {
-      await cloudinary.uploader.destroy(data.public_id);
+    if (banner.public_id) {
+      await cloudinary.uploader.destroy(banner.public_id);
     }
-    await docRef.delete();
 
-    return res.json({ success: true });
+    await Banner.findByIdAndDelete(id);
+
+    return res.json({ success: true, message: "Banner deleted from MongoDB ✅" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

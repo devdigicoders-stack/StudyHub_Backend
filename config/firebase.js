@@ -1,10 +1,12 @@
 const admin = require("firebase-admin");
 const serviceAccount = require("../serviceAccountKey.json");
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
- storageBucket: "studygrouphub-ce4da.appspot.com" // 🔥 change this
-});
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    storageBucket: "studygrouphub-ce4da.appspot.com",
+  });
+}
 
 const db = admin.firestore();
 const bucket = admin.storage().bucket();
@@ -32,4 +34,4 @@ const uploadFileToFirebase = async (file) => {
   }
 };
 
-module.exports = { db, uploadFileToFirebase };
+module.exports = { db, uploadFileToFirebase, admin };

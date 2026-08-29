@@ -1,6 +1,6 @@
- const express = require("express");
+const express = require("express");
 const router = express.Router();
-const { db } = require("../config/firebase");
+const ContactMessage = require("../models/ContactMessage");
 const multer = require("multer");
 const fs = require("fs");
 const cardController = require("./cardController");
@@ -13,7 +13,12 @@ const upload = multer({
   dest: "uploads/",
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/jpg",
+    ];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
@@ -33,18 +38,18 @@ router.post("/", async (req, res) => {
         .json({ success: false, message: "Missing required fields" });
     }
 
-    const docRef = await db.collection("contactMessages").add({
+    const doc = await ContactMessage.create({
       name,
       email,
       subject,
       message,
-      createdAt: new Date().toISOString(),
     });
 
     res.status(200).json({
       success: true,
       message: "Message sent successfully",
-      id: docRef.id,
+      id: doc._id,
+      ...doc.toJSON(),
     });
   } catch (error) {
     console.error("Error saving contact message:", error);
@@ -57,24 +62,14 @@ router.post("/", async (req, res) => {
 // GET: Fetch all contact messages
 router.get("/", async (req, res) => {
   try {
-    const snapshot = await db.collection("contactMessages").get();
-    const messages = [];
-    snapshot.forEach((doc) => {
-      messages.push({ id: doc.id, ...doc.data() });
-    });
-
-    // Sort descending by createdAt
-    messages.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
+    const messages = await ContactMessage.find().sort({ createdAt: -1 });
     res.status(200).json({ success: true, data: messages });
   } catch (error) {
     console.error("Error fetching contact messages:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Server error while fetching messages",
-      });
+    res.status(500).json({
+      success: false,
+      message: "Server error while fetching messages",
+    });
   }
 });
 
@@ -82,7 +77,7 @@ router.get("/", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    await db.collection("contactMessages").doc(id).delete();
+    await ContactMessage.findByIdAndDelete(id);
     res
       .status(200)
       .json({ success: true, message: "Message deleted successfully" });
