@@ -33,6 +33,26 @@ router.post(
   }),
 );
 
+// Get Route
+router.get(
+  "/",
+  cardController.createGetHandler({
+    collectionName: "jobs",
+    sortOrder: "desc",
+  }),
+);
+
+// Update / Edit Route
+router.put(
+  "/:id",
+  upload.single("image"),
+  cardController.createUpdateHandler({
+    collectionName: "jobs",
+    folderName: "polytechnic_jobs",
+    successMessage: "Job updated successfully!",
+  }),
+);
+
 // Delete Route using controller
 router.delete(
   "/:id",
@@ -52,3 +72,4 @@ router.use((err, req, res, next) => {
 });
 
 module.exports = router;
+

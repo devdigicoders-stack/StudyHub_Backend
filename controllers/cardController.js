@@ -122,3 +122,73 @@ exports.createDeleteHandler = ({ collectionName }) => {
     }
   };
 };
+
+// Generic Update Controller Handler
+exports.createUpdateHandler = ({
+  collectionName,
+  folderName,
+  successMessage,
+}) => {
+  return async (req, res) => {
+    let filePath = req.file?.path;
+
+    try {
+      const { id } = req.params;
+
+      const doc = await CardItem.findOne({
+        _id: id,
+        collectionName,
+      });
+
+      if (!doc) {
+        if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        return res.status(404).json({ error: "Item not found in MongoDB" });
+      }
+
+      const updateData = { ...req.body };
+      for (const key in updateData) {
+        if (typeof updateData[key] === "string") {
+          updateData[key] = updateData[key].trim();
+        }
+      }
+
+      // Handle new file upload to Cloudinary if provided
+      if (req.file) {
+        const result = await cloudinary.uploader.upload(filePath, {
+          folder: folderName || "uploads",
+          resource_type: "image",
+        });
+
+        // Delete old Cloudinary image if it exists
+        const oldCloudinaryId = doc.cloudinaryId || doc.publicId;
+        if (oldCloudinaryId) {
+          await cloudinary.uploader
+            .destroy(oldCloudinaryId)
+            .catch((err) => console.error("Cloudinary Old Image Delete Error:", err));
+        }
+
+        if (filePath && fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+
+        updateData.imageUrl = result.secure_url;
+        updateData.cloudinaryId = result.public_id;
+      }
+
+      const updatedDoc = await CardItem.findByIdAndUpdate(id, updateData, {
+        new: true,
+      });
+
+      return res.json({
+        success: true,
+        message: successMessage || "Updated successfully in MongoDB!",
+        ...updatedDoc.toJSON(),
+      });
+    } catch (err) {
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      console.error(`Error updating ${collectionName}:`, err);
+      return res.status(500).json({ error: err.message || "Internal Server Error" });
+    }
+  };
+};
+

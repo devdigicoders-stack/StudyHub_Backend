@@ -63,6 +63,8 @@ const adminRoutes = require("./routes/adminRoutes");
 // General Routes
 const feedbackRoute = require("./routes/feedback");
 const postRoute = require("./routes/postRoute");
+const blogRoutes = require("./routes/blogRoutes");
+const syllabusRoutes = require("./routes/syllabusRoutes");
 const projectRequestRoute = require("./routes/projectRequest");
 const contactRoute = require("./controllers/ContactDeatils");
 const analyticsRoutes = require("./routes/analyticsRoutes");
@@ -90,6 +92,8 @@ safeUse("/api/civil", civilRoutes);
 safeUse("/api/electronics", electronicsRoutes);
 safeUse("/api/electrical", electricalRoutes);
 safeUse("/api/study", studyRoutes);
+safeUse("/api/syllabus", syllabusRoutes);
+
 
 // 📌 2. PAYMENT & PROMOTION
 safeUse("/api/payment", paymentRoutes);
@@ -98,6 +102,8 @@ safeUse("/api/pramotion", pramotionRoute);
 // 📌 3. UPLOADS & TEAMS
 safeUse("/upload", uploadRoute);
 safeUse("/uploadjob", jobUploadRoute);
+safeUse("/api/blogs", blogRoutes);
+safeUse("/uploadblog", blogRoutes);
 safeUse("/upload-ambassador", ambassadorUploadRoute);
 safeUse("/api/placed-students", placedStudentRoutes);
 safeUse("/upload-placed-student", placedStudentRoutes);
@@ -125,6 +131,15 @@ app.get(
     sortOrder: "desc",
   }),
 );
+
+app.get(
+  "/get-blogs",
+  cardController.createGetHandler({
+    collectionName: "blogs",
+    sortOrder: "desc",
+  }),
+);
+
 
 app.get(
   "/get-ambassadors",
