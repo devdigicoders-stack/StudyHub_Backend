@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require("multer");
 const fs = require("fs");
 const cardController = require("../controllers/cardController");
-const { db } = require("../config/firebase");
+const PromotionRequest = require("../models/PromotionRequest");
 
 if (!fs.existsSync("uploads")) {
   fs.mkdirSync("uploads");
@@ -13,7 +13,12 @@ const upload = multer({
   dest: "uploads/",
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "image/jpg",
+    ];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
@@ -50,7 +55,7 @@ router.delete(
 );
 
 // ===============================
-// PROMOTION REQUESTS (Contact form from SummerTraining)
+// PROMOTION REQUESTS (SummerTraining contact form)
 // ===============================
 router.post("/request", async (req, res) => {
   try {
@@ -62,17 +67,17 @@ router.post("/request", async (req, res) => {
         .json({ success: false, message: "Missing required fields" });
     }
 
-    const docRef = await db.collection("promotionRequests").add({
+    const doc = await PromotionRequest.create({
       name,
       companyName,
       mobileNumber,
-      createdAt: new Date().toISOString(),
     });
 
     res.status(200).json({
       success: true,
       message: "Request sent successfully",
-      id: docRef.id,
+      id: doc._id,
+      ...doc.toJSON(),
     });
   } catch (error) {
     console.error("Error creating promotion request:", error);
@@ -82,13 +87,7 @@ router.post("/request", async (req, res) => {
 
 router.get("/request", async (req, res) => {
   try {
-    const snapshot = await db.collection("promotionRequests").get();
-    const requests = [];
-    snapshot.forEach((doc) => {
-      requests.push({ id: doc.id, ...doc.data() });
-    });
-    // Sort descending by createdAt
-    requests.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    const requests = await PromotionRequest.find().sort({ createdAt: -1 });
     res.status(200).json({ success: true, data: requests });
   } catch (error) {
     console.error("Error fetching requests:", error);
@@ -99,7 +98,7 @@ router.get("/request", async (req, res) => {
 router.delete("/request/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    await db.collection("promotionRequests").doc(id).delete();
+    await PromotionRequest.findByIdAndDelete(id);
     res.status(200).json({ success: true, message: "Deleted successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error" });

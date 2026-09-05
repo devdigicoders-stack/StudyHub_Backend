@@ -1,6 +1,6 @@
-const { db } = require("../../config/firebase");
+const StudyMaterial = require("../../models/StudyMaterial");
 
-const createController = (collectionName) => {
+const createController = (branchName) => {
   return {
     upload: async (req, res) => {
       try {
@@ -12,76 +12,83 @@ const createController = (collectionName) => {
             .json({ message: "Google Drive Link is required ❌" });
         }
 
-        const docRef = await db.collection(collectionName).add({
+        const newDoc = await StudyMaterial.create({
+          branch: branchName.toLowerCase(),
           title,
-          semester,
+          semester: semester ? String(semester) : "1",
           subject,
-          category,
+          category: category || "notes",
           fileUrl: fileUrl,
           status: "pending",
-          createdAt: new Date(),
         });
 
-        res.json({ message: "Uploaded ✅", id: docRef.id });
+        res.json({ message: "Uploaded to MongoDB ✅", id: newDoc._id });
       } catch (err) {
         res.status(500).json({ message: err.message });
       }
     },
 
     getApproved: async (req, res) => {
-      const snapshot = await db
-        .collection(collectionName)
-        .where("status", "==", "approved")
-        .get();
+      try {
+        const data = await StudyMaterial.find({
+          branch: branchName.toLowerCase(),
+          status: "approved",
+        }).sort({ createdAt: -1 });
 
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      res.json({ data });
+        res.json({ data });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
 
     getAll: async (req, res) => {
-      const snapshot = await db.collection(collectionName).get();
+      try {
+        const data = await StudyMaterial.find({
+          branch: branchName.toLowerCase(),
+        }).sort({ createdAt: -1 });
 
-      const data = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      res.json({ data });
+        res.json({ data });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
 
     approve: async (req, res) => {
-      await db.collection(collectionName).doc(req.params.id).update({
-        status: "approved",
-      });
+      try {
+        await StudyMaterial.findByIdAndUpdate(req.params.id, {
+          status: "approved",
+        });
 
-      res.json({ message: "Approved ✅" });
+        res.json({ message: "Approved ✅" });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
 
     reject: async (req, res) => {
-      await db.collection(collectionName).doc(req.params.id).update({
-        status: "rejected",
-      });
+      try {
+        await StudyMaterial.findByIdAndUpdate(req.params.id, {
+          status: "rejected",
+        });
 
-      res.json({ message: "Rejected ❌" });
+        res.json({ message: "Rejected ❌" });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
 
     remove: async (req, res) => {
-      const doc = await db.collection(collectionName).doc(req.params.id).get();
+      try {
+        const doc = await StudyMaterial.findByIdAndDelete(req.params.id);
 
-      if (!doc.exists) return res.status(404).json({ message: "Not found" });
+        if (!doc) return res.status(404).json({ message: "Not found" });
 
-      const data = doc.data();
-
-      await db.collection(collectionName).doc(req.params.id).delete();
-
-      res.json({ message: "Deleted ✅" });
+        res.json({ message: "Deleted ✅" });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     },
   };
 };
 
-// ✅ MOST IMPORTANT LINE
 module.exports = createController;

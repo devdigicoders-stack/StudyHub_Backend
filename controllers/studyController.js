@@ -1,14 +1,20 @@
-const { db } = require("../config/firebase");
+const StudyMaterial = require("../models/StudyMaterial");
 
 const allowedSemesters = ["1", "2", "3", "4", "5", "6"];
-const allowedCategories = ["book", "notes", "question_bank", "previous_paper"];
+const allowedCategories = [
+  "book",
+  "notes",
+  "question_bank",
+  "previous_paper",
+  "important_question",
+];
 
 // ✅ UPLOAD
 const uploadStudyMaterial = async (req, res) => {
   try {
     const { title, semester, subject, category, fileUrl } = req.body;
 
-    if (!allowedSemesters.includes(semester)) {
+    if (!allowedSemesters.includes(String(semester))) {
       return res.status(400).json({ message: "Semester must be 1–6" });
     }
 
@@ -17,20 +23,22 @@ const uploadStudyMaterial = async (req, res) => {
     }
 
     if (!fileUrl) {
-      return res.status(400).json({ message: "Google Drive Link is required" });
+      return res
+        .status(400)
+        .json({ message: "Google Drive Link is required" });
     }
 
-    const docRef = await db.collection("study").add({
+    const newDoc = await StudyMaterial.create({
+      branch: "general",
       title,
-      semester,
+      semester: String(semester),
       subject,
       category,
       fileUrl: fileUrl,
-      status: "pending", // 🔥 important
-      createdAt: new Date(),
+      status: "pending",
     });
 
-    res.json({ message: "Uploaded (Pending) ⏳", id: docRef.id });
+    res.json({ message: "Uploaded (Pending) ⏳", id: newDoc._id });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -39,16 +47,9 @@ const uploadStudyMaterial = async (req, res) => {
 // ✅ USER GET (only approved)
 const getStudyMaterial = async (req, res) => {
   try {
-    const snapshot = await db
-      .collection("study")
-      .where("status", "==", "approved")
-      .get();
-
-    const data = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
+    const data = await StudyMaterial.find({ status: "approved" }).sort({
+      createdAt: -1,
+    });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -58,13 +59,7 @@ const getStudyMaterial = async (req, res) => {
 // ✅ ADMIN GET (all)
 const getAllStudyMaterial = async (req, res) => {
   try {
-    const snapshot = await db.collection("study").get();
-
-    const data = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
-
+    const data = await StudyMaterial.find().sort({ createdAt: -1 });
     res.json({ data });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -73,33 +68,37 @@ const getAllStudyMaterial = async (req, res) => {
 
 // ✅ APPROVE
 const approveStudyMaterial = async (req, res) => {
-  await db.collection("study").doc(req.params.id).update({
-    status: "approved",
-  });
-
-  res.json({ message: "Approved ✅" });
+  try {
+    await StudyMaterial.findByIdAndUpdate(req.params.id, {
+      status: "approved",
+    });
+    res.json({ message: "Approved ✅" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // ❌ REJECT
 const rejectStudyMaterial = async (req, res) => {
-  await db.collection("study").doc(req.params.id).update({
-    status: "rejected",
-  });
-
-  res.json({ message: "Rejected ❌" });
+  try {
+    await StudyMaterial.findByIdAndUpdate(req.params.id, {
+      status: "rejected",
+    });
+    res.json({ message: "Rejected ❌" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 // 🗑 DELETE
 const deleteStudyMaterial = async (req, res) => {
-  const doc = await db.collection("study").doc(req.params.id).get();
-
-  if (!doc.exists) return res.status(404).json({ message: "Not found" });
-
-  const data = doc.data();
-
-  await db.collection("study").doc(req.params.id).delete();
-
-  res.json({ message: "Deleted ✅" });
+  try {
+    const doc = await StudyMaterial.findByIdAndDelete(req.params.id);
+    if (!doc) return res.status(404).json({ message: "Not found" });
+    res.json({ message: "Deleted ✅" });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 };
 
 module.exports = {

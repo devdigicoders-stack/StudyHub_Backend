@@ -1,6 +1,6 @@
 const fs = require("fs");
 const cloudinary = require("../config/cloudinary");
-const {db} = require("../config/firebase");
+const CardItem = require("../models/CardItem");
 
 // Generic Upload Controller Handler
 exports.createUploadHandler = ({
@@ -38,12 +38,12 @@ exports.createUploadHandler = ({
         resource_type: "image",
       });
 
-      // 4. Delete local file (Success ke baad)
+      // 4. Delete local file (after successful upload)
       if (filePath && fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
 
-      // 5. Build data object and Save to Firestore
+      // 5. Build data object and save to MongoDB
       const dataToSave = { ...req.body };
       for (const key in dataToSave) {
         if (typeof dataToSave[key] === "string") {
@@ -51,22 +51,22 @@ exports.createUploadHandler = ({
         }
       }
 
+      dataToSave.collectionName = collectionName;
       dataToSave.imageUrl = result.secure_url;
       dataToSave.cloudinaryId = result.public_id;
-      dataToSave.createdAt = new Date();
 
-      const docRef = await db.collection(collectionName).add(dataToSave);
+      const newCard = await CardItem.create(dataToSave);
 
       return res.status(201).json({
         success: true,
-        message: successMessage || "Published successfully!",
-        id: docRef.id,
-        jobId: docRef.id, // for backwards compatibility with jobUpload
-        ...dataToSave,
+        message: successMessage || "Published successfully in MongoDB!",
+        id: newCard._id,
+        jobId: newCard._id,
+        ...newCard.toJSON(),
       });
     } catch (err) {
       if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      console.error("Cloudinary/Firestore Error:", err);
+      console.error("Cloudinary/MongoDB Error:", err);
       return res
         .status(500)
         .json({ error: err.message || "Internal Server Error" });
@@ -75,33 +75,17 @@ exports.createUploadHandler = ({
 };
 
 // Generic Get Controller Handler
-exports.createGetHandler = ({ collectionName, sortOrder = "asc" }) => {
+exports.createGetHandler = ({ collectionName, sortOrder = "desc" }) => {
   return async (req, res) => {
     try {
-      const snapshot = await db.collection(collectionName).get();
-      let items = [];
-      snapshot.forEach((doc) => {
-        items.push({ id: doc.id, ...doc.data() });
-      });
-
-      // Sort in memory by createdAt
-      items.sort((a, b) => {
-        const dateA = a.createdAt
-          ? a.createdAt.toDate
-            ? a.createdAt.toDate()
-            : new Date(a.createdAt)
-          : new Date(0);
-        const dateB = b.createdAt
-          ? b.createdAt.toDate
-            ? b.createdAt.toDate()
-            : new Date(b.createdAt)
-          : new Date(0);
-        return sortOrder === "desc" ? dateB - dateA : dateA - dateB;
+      const sortDirection = sortOrder === "asc" ? 1 : -1;
+      const items = await CardItem.find({ collectionName }).sort({
+        createdAt: sortDirection,
       });
 
       res.json(items);
     } catch (error) {
-      console.error(`Error fetching ${collectionName}:`, error);
+      console.error(`Error fetching ${collectionName} from MongoDB:`, error);
       res.status(500).json({ error: error.message });
     }
   };
@@ -113,28 +97,98 @@ exports.createDeleteHandler = ({ collectionName }) => {
     try {
       const { id } = req.params;
 
-      const docRef = db.collection(collectionName).doc(id);
-      const doc = await docRef.get();
+      const doc = await CardItem.findOne({
+        _id: id,
+        collectionName,
+      });
 
-      if (!doc.exists) {
+      if (!doc) {
         return res.status(404).json({ error: "Card / Data not found" });
       }
 
-      const data = doc.data();
-
-      const cloudinaryId = data.cloudinaryId || data.publicId;
+      const cloudinaryId = doc.cloudinaryId || doc.publicId;
       if (cloudinaryId) {
         await cloudinary.uploader
           .destroy(cloudinaryId)
           .catch((err) => console.error("Cloudinary Delete Error:", err));
       }
 
-      await docRef.delete();
+      await CardItem.findByIdAndDelete(id);
 
-      res.json({ success: true, message: "Deleted successfully!" });
+      res.json({ success: true, message: "Deleted successfully from MongoDB!" });
     } catch (error) {
       console.error(`Error deleting from ${collectionName}:`, error);
       res.status(500).json({ error: error.message });
     }
   };
 };
+
+// Generic Update Controller Handler
+exports.createUpdateHandler = ({
+  collectionName,
+  folderName,
+  successMessage,
+}) => {
+  return async (req, res) => {
+    let filePath = req.file?.path;
+
+    try {
+      const { id } = req.params;
+
+      const doc = await CardItem.findOne({
+        _id: id,
+        collectionName,
+      });
+
+      if (!doc) {
+        if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+        return res.status(404).json({ error: "Item not found in MongoDB" });
+      }
+
+      const updateData = { ...req.body };
+      for (const key in updateData) {
+        if (typeof updateData[key] === "string") {
+          updateData[key] = updateData[key].trim();
+        }
+      }
+
+      // Handle new file upload to Cloudinary if provided
+      if (req.file) {
+        const result = await cloudinary.uploader.upload(filePath, {
+          folder: folderName || "uploads",
+          resource_type: "image",
+        });
+
+        // Delete old Cloudinary image if it exists
+        const oldCloudinaryId = doc.cloudinaryId || doc.publicId;
+        if (oldCloudinaryId) {
+          await cloudinary.uploader
+            .destroy(oldCloudinaryId)
+            .catch((err) => console.error("Cloudinary Old Image Delete Error:", err));
+        }
+
+        if (filePath && fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
+
+        updateData.imageUrl = result.secure_url;
+        updateData.cloudinaryId = result.public_id;
+      }
+
+      const updatedDoc = await CardItem.findByIdAndUpdate(id, updateData, {
+        new: true,
+      });
+
+      return res.json({
+        success: true,
+        message: successMessage || "Updated successfully in MongoDB!",
+        ...updatedDoc.toJSON(),
+      });
+    } catch (err) {
+      if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      console.error(`Error updating ${collectionName}:`, err);
+      return res.status(500).json({ error: err.message || "Internal Server Error" });
+    }
+  };
+};
+

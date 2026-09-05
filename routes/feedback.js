@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const { db } = require("../config/firebase");
+const Feedback = require("../models/Feedback");
 
 // POST a new feedback
 router.post("/", async (req, res) => {
@@ -11,20 +11,20 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Rating is required" });
     }
 
-    const feedbackData = {
+    const newFeedback = await Feedback.create({
       name: name ? name.trim() : "Anonymous Scholar",
       category: category || "Overall Experience",
-      rating: rating,
+      rating: Number(rating),
       comment: comment ? comment.trim() : "",
-      createdAt: new Date(),
-    };
+    });
 
-    const docRef = await db.collection("feedbacks").add(feedbackData);
-    return res
-      .status(201)
-      .json({ success: true, id: docRef.id, ...feedbackData });
+    return res.status(201).json({
+      success: true,
+      id: newFeedback._id,
+      ...newFeedback.toJSON(),
+    });
   } catch (err) {
-    console.error("Firestore Error:", err);
+    console.error("Feedback MongoDB Error:", err);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -32,25 +32,7 @@ router.post("/", async (req, res) => {
 // GET all feedbacks
 router.get("/", async (req, res) => {
   try {
-    const snapshot = await db.collection("feedbacks").get();
-    let feedbacks = [];
-    snapshot.forEach((doc) => feedbacks.push({ id: doc.id, ...doc.data() }));
-
-    // Sort Newest First
-    feedbacks.sort((a, b) => {
-      const dateA = a.createdAt
-        ? a.createdAt.toDate
-          ? a.createdAt.toDate()
-          : new Date(a.createdAt)
-        : new Date(0);
-      const dateB = b.createdAt
-        ? b.createdAt.toDate
-          ? b.createdAt.toDate()
-          : new Date(b.createdAt)
-        : new Date(0);
-      return dateB - dateA;
-    });
-
+    const feedbacks = await Feedback.find().sort({ createdAt: -1 });
     res.json(feedbacks);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -61,15 +43,13 @@ router.get("/", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const docRef = db.collection("feedbacks").doc(id);
+    const doc = await Feedback.findByIdAndDelete(id);
 
-    const doc = await docRef.get();
-    if (!doc.exists) {
+    if (!doc) {
       return res.status(404).json({ error: "Feedback not found" });
     }
 
-    await docRef.delete();
-    res.json({ success: true, message: "Feedback deleted" });
+    res.json({ success: true, message: "Feedback deleted from MongoDB" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

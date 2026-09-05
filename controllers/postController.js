@@ -1,58 +1,43 @@
-const {db} = require("../config/firebase");
+const Post = require("../models/Post");
 
 exports.createPost = async (req, res) => {
   try {
     const { type, title, desc, link, author, tag } = req.body;
 
     if (!type || !title) {
-      return res.status(400).json({ error: "Type and Title are required" });
+      return res.status(400).json({ error: "Category Type and Title are required" });
     }
 
-    const dataToSave = {
-      type,
-      title,
-      createdAt: new Date(),
-    };
+    const newPost = await Post.create({
+      type: type.trim().toLowerCase(),
+      title: title.trim(),
+      desc: desc ? desc.trim() : "",
+      link: link ? link.trim() : "",
+      author: author ? author.trim() : "",
+      tag: tag ? tag.trim() : "",
+    });
 
-    if (desc) dataToSave.desc = desc;
-    if (link) dataToSave.link = link;
-    if (author) dataToSave.author = author;
-    if (tag) dataToSave.tag = tag;
-
-    const docRef = await db.collection("posts").add(dataToSave);
-    res.status(201).json({ success: true, id: docRef.id, ...dataToSave });
+    res.status(201).json({
+      success: true,
+      message: "Post published successfully",
+      post: newPost,
+      id: newPost._id,
+      ...newPost.toJSON(),
+    });
   } catch (error) {
-    console.error("Error creating post:", error);
+    console.error("Error creating post in MongoDB:", error);
     res.status(500).json({ error: error.message });
   }
 };
 
 exports.getPosts = async (req, res) => {
   try {
-    const snapshot = await db.collection("posts").get();
-    let posts = [];
-    snapshot.forEach((doc) => {
-      posts.push({ id: doc.id, ...doc.data() });
-    });
-
-    // Sort newest first
-    posts.sort((a, b) => {
-      const dateA = a.createdAt
-        ? a.createdAt.toDate
-          ? a.createdAt.toDate()
-          : new Date(a.createdAt)
-        : new Date(0);
-      const dateB = b.createdAt
-        ? b.createdAt.toDate
-          ? b.createdAt.toDate()
-          : new Date(b.createdAt)
-        : new Date(0);
-      return dateB - dateA;
-    });
-
+    const { type } = req.query;
+    const filter = type ? { type: type.toLowerCase() } : {};
+    const posts = await Post.find(filter).sort({ createdAt: -1 });
     res.json(posts);
   } catch (error) {
-    console.error("Error fetching posts:", error);
+    console.error("Error fetching posts from MongoDB:", error);
     res.status(500).json({ error: error.message });
   }
 };
@@ -60,10 +45,14 @@ exports.getPosts = async (req, res) => {
 exports.deletePost = async (req, res) => {
   try {
     const { id } = req.params;
-    await db.collection("posts").doc(id).delete();
-    res.json({ success: true, message: "Post deleted successfully" });
+    const deleted = await Post.findByIdAndDelete(id);
+    if (!deleted) {
+      return res.status(404).json({ error: "Post not found" });
+    }
+    res.json({ success: true, message: "Post deleted successfully from MongoDB" });
   } catch (error) {
-    console.error("Error deleting post:", error);
+    console.error("Error deleting post from MongoDB:", error);
     res.status(500).json({ error: error.message });
   }
 };
+

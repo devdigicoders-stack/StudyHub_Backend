@@ -10,55 +10,44 @@ if (!fs.existsSync("uploads")) {
 
 const upload = multer({
   dest: "uploads/",
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 6 * 1024 * 1024 }, // 6MB
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg"];
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/jpg", "image/avif"];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Sirf Images (JPG, PNG, WEBP) allowed hain!"), false);
+      cb(new Error("Sirf Images (JPG, PNG, WEBP, AVIF) upload kar sakte hain!"), false);
     }
   },
 });
 
-// Post Route using controller
+// GET all placed students
+router.get(
+  "/",
+  cardController.createGetHandler({
+    collectionName: "placed_students",
+    sortOrder: "desc",
+  })
+);
+
+// POST upload new placed student
 router.post(
   "/",
   upload.single("image"),
   cardController.createUploadHandler({
-    collectionName: "jobs",
-    folderName: "polytechnic_jobs",
-    requiredFields: ["title", "place", "link"],
-    successMessage: "Job published successfully!",
-  }),
+    collectionName: "placed_students",
+    folderName: "placed_students",
+    requiredFields: ["name", "collegeName", "companyName", "role"],
+    successMessage: "Placed Student profile published successfully!",
+  })
 );
 
-// Get Route
-router.get(
-  "/",
-  cardController.createGetHandler({
-    collectionName: "jobs",
-    sortOrder: "desc",
-  }),
-);
-
-// Update / Edit Route
-router.put(
-  "/:id",
-  upload.single("image"),
-  cardController.createUpdateHandler({
-    collectionName: "jobs",
-    folderName: "polytechnic_jobs",
-    successMessage: "Job updated successfully!",
-  }),
-);
-
-// Delete Route using controller
+// DELETE placed student by ID
 router.delete(
   "/:id",
   cardController.createDeleteHandler({
-    collectionName: "jobs",
-  }),
+    collectionName: "placed_students",
+  })
 );
 
 // Multer error handling middleware
@@ -72,4 +61,3 @@ router.use((err, req, res, next) => {
 });
 
 module.exports = router;
-

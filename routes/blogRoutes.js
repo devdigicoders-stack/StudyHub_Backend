@@ -16,48 +16,52 @@ const upload = multer({
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Sirf Images allowed hain!"), false);
+      cb(new Error("Sirf Images (JPG, PNG, WEBP) allowed hain!"), false);
     }
   },
 });
 
+// Post / Create Blog
 router.post(
   "/",
   upload.single("image"),
   cardController.createUploadHandler({
-    collectionName: "adminTeam",
-    folderName: "admin_team",
-    requiredFields: ["name", "role", "skill"],
-    successMessage: "Admin Team member added successfully!",
+    collectionName: "blogs",
+    folderName: "polytechnic_blogs",
+    requiredFields: ["title", "description"],
+    successMessage: "Blog published successfully!",
   }),
 );
 
+// Get All Blogs
 router.get(
   "/",
   cardController.createGetHandler({
-    collectionName: "adminTeam",
-    sortOrder: "asc",
+    collectionName: "blogs",
+    sortOrder: "desc",
   }),
 );
 
-router.delete(
-  "/:id",
-  cardController.createDeleteHandler({
-    collectionName: "adminTeam",
-  }),
-);
-
+// Update / Edit Blog
 router.put(
   "/:id",
   upload.single("image"),
   cardController.createUpdateHandler({
-    collectionName: "adminTeam",
-    folderName: "admin_team",
-    successMessage: "Admin Team member updated successfully!",
+    collectionName: "blogs",
+    folderName: "polytechnic_blogs",
+    successMessage: "Blog updated successfully!",
   }),
 );
 
+// Delete Blog
+router.delete(
+  "/:id",
+  cardController.createDeleteHandler({
+    collectionName: "blogs",
+  }),
+);
 
+// Multer error handling
 router.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ error: `Multer Error: ${err.message}` });

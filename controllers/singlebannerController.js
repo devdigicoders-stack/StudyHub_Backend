@@ -1,7 +1,7 @@
 const cloudinary = require("../config/cloudinary");
-const { db } = require("../config/firebase");
+const SingleBanner = require("../models/SingleBanner");
 
-// 🔥 UPLOAD / UPDATE
+// 🔥 UPLOAD / UPDATE SINGLE BANNER
 exports.uploadBanner = async (req, res) => {
   try {
     const { page } = req.body;
@@ -21,40 +21,32 @@ exports.uploadBanner = async (req, res) => {
       folder: `single_banners/${page}`,
     });
 
-    // 🔥 old banner delete (same page) from 'single_banners' collection
-    const snapshot = await db
-      .collection("single_banners")
-      .where("page", "==", page)
-      .get();
-
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
-
-      // Only attempt to destroy if public_id exists
-      if (data.public_id) {
+    // Delete old banners for the same page
+    const oldBanners = await SingleBanner.find({ page });
+    for (const oldDoc of oldBanners) {
+      if (oldDoc.public_id) {
         try {
-          await cloudinary.uploader.destroy(data.public_id);
+          await cloudinary.uploader.destroy(oldDoc.public_id);
         } catch (e) {
           console.warn("Could not delete old image from Cloudinary:", e);
         }
       }
-      await doc.ref.delete();
+      await SingleBanner.findByIdAndDelete(oldDoc._id);
     }
 
-    // 🔥 save new banner
-    const docRef = await db.collection("single_banners").add({
+    // Save new banner in MongoDB
+    const banner = await SingleBanner.create({
+      page,
       url: result.secure_url,
       public_id: result.public_id,
-      page,
-      createdAt: new Date(),
     });
 
     res.json({
       success: true,
-      message: `${page} banner uploaded successfully`,
+      message: `${page} banner uploaded successfully to MongoDB`,
       data: {
-        id: docRef.id,
-        url: result.secure_url,
+        id: banner._id,
+        url: banner.url,
       },
     });
   } catch (err) {
@@ -63,61 +55,44 @@ exports.uploadBanner = async (req, res) => {
   }
 };
 
-// 🔥 GET BANNER
+// 🔥 GET SINGLE BANNER
 exports.getBanner = async (req, res) => {
   try {
     const { page } = req.params;
 
-    const snapshot = await db
-      .collection("single_banners")
-      .where("page", "==", page)
-      .limit(1)
-      .get();
+    const banner = await SingleBanner.findOne({ page });
 
-    if (snapshot.empty) {
+    if (!banner) {
       return res.json(null);
     }
 
-    const doc = snapshot.docs[0];
-
-    res.json({
-      id: doc.id,
-      ...doc.data(),
-    });
+    res.json(banner);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };
 
-// 🔥 DELETE BANNER
+// 🔥 DELETE SINGLE BANNER
 exports.deleteBanner = async (req, res) => {
   try {
     const { page } = req.params;
 
-    // We used page string as param in UI earlier. Wait, let's check UI.
-    // In AboutUpload: handle delete calls axios.delete(`${API}/${page}`);
-    // So the param is actually :page, NOT id!
+    const banners = await SingleBanner.find({ page });
 
-    const snapshot = await db
-      .collection("single_banners")
-      .where("page", "==", page)
-      .get();
-
-    if (snapshot.empty) {
+    if (!banners || banners.length === 0) {
       return res.status(404).json({ message: "Banner not found" });
     }
 
-    for (const doc of snapshot.docs) {
-      const data = doc.data();
-      if (data.public_id) {
-        await cloudinary.uploader.destroy(data.public_id);
+    for (const doc of banners) {
+      if (doc.public_id) {
+        await cloudinary.uploader.destroy(doc.public_id);
       }
-      await doc.ref.delete();
+      await SingleBanner.findByIdAndDelete(doc._id);
     }
 
     res.json({
       success: true,
-      message: "Banner deleted successfully",
+      message: "Banner deleted successfully from MongoDB",
     });
   } catch (err) {
     console.error("DELETE ERROR:", err);
